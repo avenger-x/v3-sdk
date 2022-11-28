@@ -159,12 +159,12 @@ export class Pool {
   public async getOutputAmount(
     inputAmount: CurrencyAmount<Token>,
     sqrtPriceLimitX96?: JSBI
-  ): Promise<[CurrencyAmount<Token>, Pool]> {
+  ): Promise<[CurrencyAmount<Token>, Pool, CurrencyAmount<Token>]> {
     invariant(this.involvesToken(inputAmount.currency), 'TOKEN')
 
     const zeroForOne = inputAmount.currency.equals(this.token0)
 
-    const { amountCalculated: outputAmount, sqrtRatioX96, liquidity, tickCurrent } = await this.swap(
+    const { amountCalculated: outputAmount, sqrtRatioX96, liquidity, tickCurrent, amountSpecifiedRemaining: remainingInputAmount } = await this.swap(
       zeroForOne,
       inputAmount.quotient,
       sqrtPriceLimitX96
@@ -172,7 +172,8 @@ export class Pool {
     const outputToken = zeroForOne ? this.token1 : this.token0
     return [
       CurrencyAmount.fromRawAmount(outputToken, JSBI.multiply(outputAmount, NEGATIVE_ONE)),
-      new Pool(this.token0, this.token1, this.fee, sqrtRatioX96, liquidity, tickCurrent, this.tickDataProvider)
+      new Pool(this.token0, this.token1, this.fee, sqrtRatioX96, liquidity, tickCurrent, this.tickDataProvider),
+      CurrencyAmount.fromRawAmount(inputAmount.currency, remainingInputAmount)
     ]
   }
 
@@ -185,12 +186,12 @@ export class Pool {
   public async getInputAmount(
     outputAmount: CurrencyAmount<Token>,
     sqrtPriceLimitX96?: JSBI
-  ): Promise<[CurrencyAmount<Token>, Pool]> {
+  ): Promise<[CurrencyAmount<Token>, Pool, CurrencyAmount<Token>]> {
     invariant(outputAmount.currency.isToken && this.involvesToken(outputAmount.currency), 'TOKEN')
 
     const zeroForOne = outputAmount.currency.equals(this.token1)
 
-    const { amountCalculated: inputAmount, sqrtRatioX96, liquidity, tickCurrent } = await this.swap(
+    const { amountCalculated: inputAmount, sqrtRatioX96, liquidity, tickCurrent, amountSpecifiedRemaining: remainingOutputAmount } = await this.swap(
       zeroForOne,
       JSBI.multiply(outputAmount.quotient, NEGATIVE_ONE),
       sqrtPriceLimitX96
@@ -198,7 +199,8 @@ export class Pool {
     const inputToken = zeroForOne ? this.token0 : this.token1
     return [
       CurrencyAmount.fromRawAmount(inputToken, inputAmount),
-      new Pool(this.token0, this.token1, this.fee, sqrtRatioX96, liquidity, tickCurrent, this.tickDataProvider)
+      new Pool(this.token0, this.token1, this.fee, sqrtRatioX96, liquidity, tickCurrent, this.tickDataProvider),
+      CurrencyAmount.fromRawAmount(outputAmount.currency, JSBI.multiply(remainingOutputAmount, NEGATIVE_ONE))
     ]
   }
 
@@ -216,7 +218,7 @@ export class Pool {
     zeroForOne: boolean,
     amountSpecified: JSBI,
     sqrtPriceLimitX96?: JSBI
-  ): Promise<{ amountCalculated: JSBI; sqrtRatioX96: JSBI; liquidity: JSBI; tickCurrent: number }> {
+  ): Promise<{ amountCalculated: JSBI; sqrtRatioX96: JSBI; liquidity: JSBI; tickCurrent: number; amountSpecifiedRemaining: JSBI }> {
     if (!sqrtPriceLimitX96)
       sqrtPriceLimitX96 = zeroForOne
         ? JSBI.add(TickMath.MIN_SQRT_RATIO, ONE)
@@ -310,7 +312,8 @@ export class Pool {
       amountCalculated: state.amountCalculated,
       sqrtRatioX96: state.sqrtPriceX96,
       liquidity: state.liquidity,
-      tickCurrent: state.tick
+      tickCurrent: state.tick,
+      amountSpecifiedRemaining: state.amountSpecifiedRemaining
     }
   }
 
